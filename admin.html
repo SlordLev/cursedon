@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://player-auth.services.api.unity.com https://cloud-code.services.api.unity.com; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Cursedon Admin</title>
+  <meta name="theme-color" content="#0b090e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cursedon Admin">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="admin.webmanifest">
+  <link rel="icon" href="admin-icono-192.png">
+  <link rel="apple-touch-icon" href="admin-icono-180.png">
+  <link rel="stylesheet" href="admin.css">
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <noscript><p class="error">Esta página necesita JavaScript.</p></noscript>
+
+  <!-- Entrar -->
+  <section id="entrar" class="pantalla" hidden>
+    <img class="emblema" src="admin-icono-192.png" alt="" width="96" height="96">
+    <h1 id="entrar-titulo">Cursedon Admin</h1>
+    <form id="form-entrar" novalidate>
+      <label class="campo">Usuario
+        <input id="usuario" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      </label>
+      <label class="campo">Contraseña
+        <span class="con-boton">
+          <input id="clave" name="password" type="password" autocomplete="current-password" required>
+          <button type="button" id="ver-clave" class="btn">Ver</button>
+        </span>
+      </label>
+      <p id="reglas-cuenta" class="nota" hidden>Usuario: de 3 a 20 caracteres, letras, números y . - @ _. Contraseña: de 8 a 30 caracteres, con mayúscula, minúscula, número y símbolo.</p>
+      <button type="submit" id="btn-entrar" class="btn primario grande">Entrar</button>
+      <p id="error-entrar" class="error" role="alert" hidden></p>
+    </form>
+    <button type="button" id="cambiar-modo" class="enlace">Primera vez: crear la cuenta de administrador</button>
+  </section>
+
+  <!-- Sin permiso -->
+  <section id="sin-permiso" class="pantalla" hidden>
+    <h1>Todavía no sos administrador</h1>
+    <p>El servidor solo atiende a los Player ID de la clave <code>buzon_admins</code> de Remote Config. Entraste con este:</p>
+    <p class="id-grande" id="sp-id"></p>
+    <button type="button" id="sp-copiar" class="btn primario grande">Copiar Player ID</button>
+    <p class="nota">Sumalo a la lista <code>ids</code> de <code>buzon_admins</code>, sin borrar los que ya están, y publicá el cambio en el Dashboard de Unity. Después tocá Reintentar.</p>
+    <button type="button" id="sp-reintentar" class="btn grande">Reintentar</button>
+    <button type="button" id="sp-salir" class="enlace">Salir</button>
+  </section>
+
+  <!-- Aplicacion -->
+  <div id="app" hidden>
+    <header class="barra">
+      <strong class="marca">Cursedon Admin</strong>
+      <button type="button" id="mi-id" class="id-copiable" aria-label="Copiar mi Player ID"></button>
+      <button type="button" id="salir" class="btn chico">Salir</button>
+    </header>
+
+    <main>
+      <!-- Fotos -->
+      <section id="tab-fotos" class="tab tab-fotos">
+        <div id="revision" hidden>
+          <div class="rev-cabecera">
+            <button type="button" id="rev-volver" class="btn chico" hidden>‹ Denuncias</button>
+            <span id="rev-contador"></span>
+            <button type="button" id="rev-actualizar" class="btn chico">Actualizar</button>
+          </div>
+          <div class="foto-marco">
+            <img id="foto-grande" alt="" hidden>
+            <p id="foto-mensaje" class="foto-mensaje"></p>
+            <span id="foto-etiqueta" class="foto-etiqueta" hidden></span>
+            <figure id="foto-publicada" class="foto-publicada" hidden>
+              <img id="foto-chica" alt="Foto publicada ahora">
+              <figcaption>Publicada</figcaption>
+            </figure>
+          </div>
+          <div class="rev-datos">
+            <button type="button" id="rev-id" class="id-copiable" aria-label="Copiar el Player ID del jugador"></button>
+            <span id="rev-hora" class="suave"></span>
+          </div>
+          <p id="rev-apelacion" class="apelacion" hidden></p>
+          <div class="rev-acciones">
+            <div class="fila-principal">
+              <button type="button" id="b-rechazar" class="btn peligro grande" disabled>✕ Rechazar</button>
+              <button type="button" id="b-aprobar" class="btn exito grande" disabled>✓ Aprobar</button>
+            </div>
+            <div class="fila-secundaria">
+              <button type="button" id="b-saltar" class="btn" disabled>Saltar</button>
+              <button type="button" id="b-retirar" class="btn" disabled>Retirar publicada</button>
+              <button type="button" id="b-vetar" class="btn" disabled>Vetar</button>
+            </div>
+          </div>
+        </div>
+        <div id="fotos-vacio" class="vacio" hidden>
+          <p id="fotos-vacio-texto"></p>
+          <button type="button" id="fotos-recargar" class="btn primario grande">Actualizar</button>
+        </div>
+      </section>
+
+      <!-- Denuncias -->
+      <section id="tab-denuncias" class="tab relleno" hidden>
+        <div class="fila-dia">
+          <button type="button" id="den-antes" class="btn" aria-label="Día anterior">‹</button>
+          <input id="den-dia" type="date" aria-label="Día de las denuncias, en UTC">
+          <button type="button" id="den-despues" class="btn" aria-label="Día siguiente">›</button>
+          <button type="button" id="den-actualizar" class="btn">Actualizar</button>
+        </div>
+        <p id="den-resumen" class="nota"></p>
+        <div id="den-lista" class="lista"></div>
+      </section>
+
+      <!-- Codigos -->
+      <section id="tab-codigos" class="tab relleno" hidden>
+        <h2>Generar un lote</h2>
+        <form id="form-codigos" novalidate>
+          <div class="dos-columnas">
+            <label class="campo">Cantidad (hasta 500)
+              <input id="c-cantidad" type="number" inputmode="numeric" min="1" max="500" value="10">
+            </label>
+            <label class="campo">Usos por código
+              <input id="c-usos" type="number" inputmode="numeric" min="1" value="1">
+            </label>
+          </div>
+          <label class="campo">Recompensa
+            <select id="c-tipo">
+              <option value="cosmetico">Cosmético o skin</option>
+              <option value="elite">Pase Élite</option>
+            </select>
+          </label>
+          <label class="campo" id="c-recompensa-campo">Id del cosmético
+            <input id="c-recompensa" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="96">
+          </label>
+          <label class="campo" id="c-temporada-campo" hidden>Temporada
+            <input id="c-temporada" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" value="s01">
+          </label>
+          <div class="dos-columnas">
+            <label class="campo">Prefijo
+              <input id="c-prefijo" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="8" value="VELO">
+            </label>
+            <label class="campo">Campaña o motivo
+              <input id="c-campana" type="text" maxlength="64">
+            </label>
+          </div>
+          <div class="dos-columnas">
+            <label class="campo">Desde (opcional)
+              <input id="c-desde" type="date">
+            </label>
+            <label class="campo">Vence (opcional)
+              <input id="c-hasta" type="date">
+            </label>
+          </div>
+          <p class="nota">Desde y Vence cuentan a las 00:00 de ese día, hora de este teléfono: el día que elijas en Vence ya no sirve.</p>
+          <label class="tilde"><input id="c-por-cuenta" type="checkbox" checked> Una vez por cuenta</label>
+          <button type="submit" id="c-generar" class="btn primario grande">Generar</button>
+        </form>
+        <div id="c-lotes" class="lista"></div>
+
+        <h2>Consultar o revocar</h2>
+        <label class="campo">Código
+          <input id="c-codigo" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="32">
+        </label>
+        <div class="dos-botones">
+          <button type="button" id="c-consultar" class="btn grande">Consultar usos</button>
+          <button type="button" id="c-revocar" class="btn peligro grande">Revocar</button>
+        </div>
+        <div id="c-resultado" class="lista"></div>
+      </section>
+
+      <!-- Temporada -->
+      <section id="tab-temporada" class="tab relleno" hidden>
+        <div class="titulo-con-boton">
+          <h2>Temporada y secretos</h2>
+          <button type="button" id="t-actualizar" class="btn">Actualizar</button>
+        </div>
+        <div id="t-estado" class="lista"></div>
+        <h2>Errores de compra</h2>
+        <div class="fila-dia">
+          <button type="button" id="err-antes" class="btn" aria-label="Día anterior">‹</button>
+          <input id="err-dia" type="date" aria-label="Día de los errores, en UTC">
+          <button type="button" id="err-despues" class="btn" aria-label="Día siguiente">›</button>
+          <button type="button" id="err-actualizar" class="btn">Actualizar</button>
+        </div>
+        <p id="err-resumen" class="nota"></p>
+        <div id="err-lista" class="lista"></div>
+      </section>
+    </main>
+
+    <nav class="pestanas" aria-label="Secciones">
+      <button type="button" class="pestana" data-tab="fotos" aria-current="page">Fotos <span id="insignia" class="insignia" hidden></span></button>
+      <button type="button" class="pestana" data-tab="denuncias">Denuncias</button>
+      <button type="button" class="pestana" data-tab="codigos">Códigos</button>
+      <button type="button" class="pestana" data-tab="temporada">Temporada</button>
+    </nav>
+  </div>
+
+  <dialog id="hoja" class="hoja"></dialog>
+  <div id="aviso" class="aviso" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
