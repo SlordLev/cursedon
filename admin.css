@@ -159,7 +159,7 @@ main { flex: 1; min-height: 0; overflow: auto; }
 .pestanas {
   flex: none;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--borde);
   background: var(--panel);
@@ -171,7 +171,7 @@ main { flex: 1; min-height: 0; overflow: auto; }
   border-top: 3px solid transparent;
   background: none;
   color: var(--suave);
-  font: .88rem/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: .78rem/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -265,6 +265,11 @@ main { flex: 1; min-height: 0; overflow: auto; }
 .fila-dia .btn { padding: 4px 8px; }
 .titulo-con-boton { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .titulo-con-boton h2 { margin: 0; }
+.buscador { margin-bottom: 12px; }
+.buscador .campo { margin-bottom: 4px; }
+.buscador input { min-height: 48px; padding: 8px 12px; border: 1px solid var(--borde); border-radius: 8px; background: var(--panel); color: var(--texto); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.titulo-con-boton.vetados { margin-top: 20px; }
+.datos dd.mono { overflow-wrap: anywhere; }
 
 /* ---- Hoja de abajo y avisos ---- */
 

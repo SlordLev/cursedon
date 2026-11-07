@@ -92,7 +92,7 @@
             <div class="fila-secundaria">
               <button type="button" id="b-saltar" class="btn" disabled>Saltar</button>
               <button type="button" id="b-retirar" class="btn" disabled>Retirar publicada</button>
-              <button type="button" id="b-vetar" class="btn" disabled>Vetar</button>
+              <button type="button" id="b-vetar" class="btn" disabled>Vetar fotos</button>
             </div>
           </div>
         </div>
@@ -112,6 +112,24 @@
         </div>
         <p id="den-resumen" class="nota"></p>
         <div id="den-lista" class="lista"></div>
+      </section>
+
+      <!-- Jugadores -->
+      <section id="tab-jugadores" class="tab relleno" hidden>
+        <form id="form-jugador" class="buscador" novalidate>
+          <label class="campo" for="j-buscar">Nombre o Player ID</label>
+          <div class="con-boton">
+            <input id="j-buscar" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64">
+            <button type="submit" id="j-ir" class="btn">Buscar</button>
+          </div>
+        </form>
+        <div id="j-resultado" class="lista"></div>
+        <div class="titulo-con-boton vetados">
+          <h2>Vetados</h2>
+          <button type="button" id="j-actualizar" class="btn">Actualizar</button>
+        </div>
+        <p id="j-resumen" class="nota"></p>
+        <div id="j-vetos" class="lista"></div>
       </section>
 
       <!-- Codigos -->
@@ -193,6 +211,7 @@
     <nav class="pestanas" aria-label="Secciones">
       <button type="button" class="pestana" data-tab="fotos" aria-current="page">Fotos <span id="insignia" class="insignia" hidden></span></button>
       <button type="button" class="pestana" data-tab="denuncias">Denuncias</button>
+      <button type="button" class="pestana" data-tab="jugadores">Jugadores</button>
       <button type="button" class="pestana" data-tab="codigos">Códigos</button>
       <button type="button" class="pestana" data-tab="temporada">Temporada</button>
     </nav>

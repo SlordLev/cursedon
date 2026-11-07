@@ -48,6 +48,9 @@ const MENSAJES = {
   tipo_invalido: "El tipo de recompensa no es válido.",
   recompensa_invalida: "Falta el id del cosmético, o es demasiado largo.",
   codigo_invalido: "Ese código no existe o no tiene un formato válido.",
+  no_existe: "No hay ningún jugador con ese nombre o Player ID.",
+  es_admin: "Esa cuenta es de administrador: no se puede vetar.",
+  cuenta_error: "Unity no pudo reactivar la cuenta, así que sigue vetado. Probá de nuevo más tarde.",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -379,10 +382,11 @@ function irA(tab) {
     if (boton.dataset.tab === tab) boton.setAttribute("aria-current", "page");
     else boton.removeAttribute("aria-current");
   }
-  for (const nombre of ["fotos", "denuncias", "codigos", "temporada"]) $("tab-" + nombre).hidden = nombre !== tab;
+  for (const nombre of ["fotos", "denuncias", "jugadores", "codigos", "temporada"]) $("tab-" + nombre).hidden = nombre !== tab;
   if (cargadas.has(tab)) return;
   cargadas.add(tab);
   if (tab === "denuncias") cargarDenuncias();
+  if (tab === "jugadores") cargarVetos();
   if (tab === "temporada") { cargarEstado(); cargarErrores(); }
 }
 
@@ -705,11 +709,11 @@ function pedirVeto() {
     const n = leerDias();
     if (n === null) return;
     cerrarHoja();
-    decidir("adminVetar", { id, dias: n }, n === 0 ? "Veto levantado." : "Jugador vetado por " + n + (n === 1 ? " día." : " días."), false);
+    decidir("adminVetar", { id, dias: n }, n === 0 ? "Ya puede volver a subir fotos." : "Sin subir fotos por " + n + (n === 1 ? " día." : " días."), false);
   });
   abrirHoja(
-    el("h2", null, "¿Vetar a " + corto(id) + "?"),
-    el("p", null, "No podrá subir fotos nuevas. La publicada sigue puesta hasta que la retires, y la pendiente sigue en la cola. Con 0 días se levanta el veto."),
+    el("h2", null, "¿Vetar las fotos de " + corto(id) + "?"),
+    el("p", null, "Solo le impide subir fotos nuevas: para sacarlo de todo lo online, usá la pestaña Jugadores. La publicada sigue puesta hasta que la retires, y la pendiente sigue en la cola. Con 0 días se levanta este veto."),
     el("div", { class: "chips" }, ...chips),
     el("label", { class: "campo" }, "Días", dias),
     confirmar,
@@ -788,7 +792,160 @@ function tarjetaDenuncia(d) {
       el("dt", null, "Denunció"), el("dd", { class: "mono" }, String(d.por || ""))),
     el("div", { class: "botones-tarjeta" },
       el("button", { type: "button", class: "btn", onclick: () => verJugadorDenunciado(String(d.jugador)) }, "Ver foto"),
+      el("button", { type: "button", class: "btn", onclick: () => abrirJugador(String(d.jugador)) }, "Ver jugador"),
       el("button", { type: "button", class: "btn", onclick: () => copiar(String(d.jugador), "Player ID copiado.") }, "Copiar ID")));
+}
+
+// ---------------------------------------------------------------- jugadores
+
+/* Un nombre de perfil tiene hasta 16 caracteres; un Player ID, bastantes mas. */
+const NOMBRE_MAX = 16;
+const datosDeJugador = (texto) => (texto.length > NOMBRE_MAX ? { id: texto } : { nombre: texto });
+const miles = (n) => Number(n || 0).toLocaleString("es-AR");
+let vistaJugador = 0;
+
+function abrirJugador(id) {
+  irA("jugadores");
+  $("j-buscar").value = id;
+  verJugador({ id });
+}
+
+function buscarJugador(evento) {
+  evento.preventDefault();
+  const texto = $("j-buscar").value.trim();
+  if (texto) verJugador(datosDeJugador(texto));
+}
+
+async function verJugador(pedido) {
+  const vista = ++vistaJugador;
+  const resultado = $("j-resultado");
+  resultado.replaceChildren(el("p", { class: "nota" }, "Buscando…"));
+  try {
+    const r = await llamar(MODERACION, "adminJugador", pedido, true);
+    if (vista === vistaJugador) resultado.replaceChildren(tarjetaJugador(r));
+  } catch (fallo) {
+    if (vista === vistaJugador) resultado.replaceChildren(el("p", { class: "nota" }, mensajeDe(fallo)));
+  }
+}
+
+function textoCuenta(cuenta) {
+  switch (cuenta.estado) {
+    case "ok": return (cuenta.suspendida ? "Suspendida" : "Activa") + (cuenta.vinculada ? ", vinculada a una plataforma" : ", sin vincular");
+    case "sin_secreto": return "Sin datos: falta el secreto CUENTA_SERVICIO";
+    case "no_existe": return "No existe en Unity";
+    default: return "No se pudo consultar";
+  }
+}
+
+function tarjetaJugador(r) {
+  const p = r.perfil;
+  const nombre = p ? p.nombre : "";
+  const filas = [];
+  const fila = (titulo, valor, clase) => filas.push(el("dt", null, titulo), el("dd", clase ? { class: clase } : null, String(valor)));
+  if (p) {
+    fila("Nivel", p.nivel);
+    fila("Bajas", miles(p.kills));
+    fila("Oro", miles(p.oro));
+    if (p.kills > 0) fila("Oro por baja", miles(Math.round(p.oro / p.kills)));
+    fila("Portales", miles(p.portales));
+    fila("Muertes", miles(p.muertes));
+    if (p.clan) fila("Clan", p.clan);
+    if (p.bio) fila("Bio", p.bio);
+  }
+  fila("Cuenta", textoCuenta(r.cuenta));
+  if (r.cuenta.ingreso) fila("Último ingreso", fechaHora(r.cuenta.ingreso * 1000));
+  fila("Player ID", r.id, "mono");
+  if (r.veto) {
+    fila("Vetado", fechaHora(r.veto.t));
+    fila("Motivo", r.veto.m || "Sin motivo");
+  }
+  const botones = [];
+  if (r.admin) botones.push(el("span", { class: "etiqueta" }, "Administrador"));
+  else if (r.veto) {
+    botones.push(el("button", { type: "button", class: "btn", onclick: () => pedirLevantarVeto(r.id, nombre) }, "Levantar veto"));
+    if (r.veto.cuenta !== "ok") botones.push(el("button", { type: "button", class: "btn peligro", onclick: () => pedirVetoCuenta(r.id, nombre, r.veto.m) }, "Repetir veto"));
+  } else {
+    botones.push(el("button", { type: "button", class: "btn peligro", onclick: () => pedirVetoCuenta(r.id, nombre, "") }, "Vetar"));
+  }
+  botones.push(el("button", { type: "button", class: "btn", onclick: () => copiar(r.id, "Player ID copiado.") }, "Copiar ID"));
+  return el("article", { class: "tarjeta" },
+    el("div", { class: "cabecera-tarjeta" },
+      el("strong", null, nombre || "Sin perfil"),
+      r.veto ? el("span", { class: "etiqueta mal" }, "Vetado") : null),
+    el("dl", { class: "datos" }, ...filas),
+    el("div", { class: "botones-tarjeta" }, ...botones));
+}
+
+function pedirVetoCuenta(id, nombre, motivoAnterior) {
+  const motivo = el("input", { type: "text", maxlength: "200", value: motivoAnterior || "", "aria-label": "Motivo del veto" });
+  abrirHoja(
+    el("h2", null, "¿Vetar a " + (nombre || corto(id)) + "?"),
+    el("p", null, "Se queda sin chat, mercado, amigos, clanes ni tops, y sus publicaciones dejan de verse. Puede seguir jugando su partida, solo. Se puede levantar cuando quieras."),
+    el("label", { class: "campo" }, "Motivo (solo lo ves vos)", motivo),
+    el("button", { type: "button", class: "btn peligro grande", onclick: () => { cerrarHoja(); vetarCuenta(id, nombre, motivo.value.trim()); } }, "Sí, vetar"),
+    el("button", { type: "button", class: "btn", autofocus: true, onclick: cerrarHoja }, "Cancelar"),
+  );
+}
+
+async function vetarCuenta(id, nombre, motivo) {
+  const quien = nombre || corto(id);
+  try {
+    const r = await llamar(MODERACION, "adminVetarCuenta", { id, motivo, nombre }, false);
+    if (r.cuenta === "ok") avisar(quien + " quedó vetado.", "bien");
+    else if (r.cuenta === "sin_secreto") avisar(quien + " quedó vetado, pero falta el secreto CUENTA_SERVICIO: con las versiones viejas del juego todavía puede chatear. Mirá la guía.", "mal");
+    else avisar(quien + " quedó vetado, pero Unity no suspendió la cuenta" + (r.http ? " (HTTP " + r.http + ")" : "") + ". Repetí el veto más tarde.", "mal");
+  } catch (fallo) {
+    avisarFallo(fallo);
+  }
+  verJugador({ id });
+  cargarVetos();
+}
+
+function pedirLevantarVeto(id, nombre) {
+  abrirHoja(
+    el("h2", null, "¿Levantar el veto de " + (nombre || corto(id)) + "?"),
+    el("p", null, "Vuelve a tener todo lo online, y sus publicaciones se ven de nuevo. Vuelve a los tops la próxima vez que sincronice."),
+    el("button", { type: "button", class: "btn primario grande", onclick: () => { cerrarHoja(); levantarVeto(id, nombre); } }, "Sí, levantar"),
+    el("button", { type: "button", class: "btn", autofocus: true, onclick: cerrarHoja }, "Cancelar"),
+  );
+}
+
+async function levantarVeto(id, nombre) {
+  try {
+    await llamar(MODERACION, "adminLevantarVeto", { id }, false);
+    avisar("Veto levantado: " + (nombre || corto(id)) + ".", "bien");
+  } catch (fallo) {
+    avisarFallo(fallo);
+  }
+  verJugador({ id });
+  cargarVetos();
+}
+
+async function cargarVetos() {
+  const lista = $("j-vetos");
+  const resumen = $("j-resumen");
+  resumen.textContent = "Cargando…";
+  try {
+    const { vetos } = await llamar(MODERACION, "adminVetos", null, true);
+    resumen.textContent = vetos.length === 0 ? "No hay nadie vetado." : vetos.length + (vetos.length === 1 ? " vetado." : " vetados.");
+    lista.replaceChildren(...vetos.map(tarjetaVeto));
+  } catch (fallo) {
+    resumen.textContent = mensajeDe(fallo);
+  }
+}
+
+function tarjetaVeto(v) {
+  const id = String(v.id);
+  const nombre = String(v.n || "");
+  return el("article", { class: "tarjeta" },
+    el("div", { class: "cabecera-tarjeta" },
+      el("strong", null, nombre || "Sin perfil"),
+      v.cuenta === "ok" ? null : el("span", { class: "etiqueta mal" }, "Sin suspender en Unity"),
+      el("span", { class: "suave" }, fechaHora(v.t))),
+    v.m ? el("p", null, String(v.m)) : null,
+    el("div", { class: "botones-tarjeta" },
+      el("button", { type: "button", class: "btn", onclick: () => abrirJugador(id) }, "Ver"),
+      el("button", { type: "button", class: "btn", onclick: () => pedirLevantarVeto(id, nombre) }, "Levantar veto")));
 }
 
 // ---------------------------------------------------------------- codigos
@@ -1044,6 +1201,9 @@ function conectar() {
   $("den-actualizar").addEventListener("click", cargarDenuncias);
   $("den-antes").addEventListener("click", () => { moverDia($("den-dia"), -1); cargarDenuncias(); });
   $("den-despues").addEventListener("click", () => { moverDia($("den-dia"), 1); cargarDenuncias(); });
+
+  $("form-jugador").addEventListener("submit", buscarJugador);
+  $("j-actualizar").addEventListener("click", cargarVetos);
 
   $("form-codigos").addEventListener("submit", generarCodigos);
   $("c-tipo").addEventListener("change", () => {
