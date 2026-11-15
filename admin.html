@@ -16,6 +16,7 @@
   <link rel="icon" href="admin-icono-192.png">
   <link rel="apple-touch-icon" href="admin-icono-180.png">
   <link rel="stylesheet" href="admin.css">
+  <script src="admin-objetos.js" defer></script>
   <script src="admin.js" defer></script>
 </head>
 <body>
@@ -132,6 +133,73 @@
         <div id="j-vetos" class="lista"></div>
       </section>
 
+      <!-- Buzon -->
+      <section id="tab-buzon" class="tab relleno" hidden>
+        <h2>Nueva carta</h2>
+        <form id="form-carta" novalidate>
+          <div class="segmento" role="group" aria-label="Para quién">
+            <button type="button" id="bz-para-uno" class="btn" aria-pressed="true">Un jugador</button>
+            <button type="button" id="bz-para-todos" class="btn" aria-pressed="false">Todos</button>
+          </div>
+          <div id="bz-zona-uno">
+            <label class="campo" for="bz-buscar">Nombre o Player ID</label>
+            <div class="con-boton">
+              <input id="bz-buscar" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64">
+              <button type="button" id="bz-buscar-ir" class="btn">Buscar</button>
+            </div>
+            <div id="bz-resultados" class="lista"></div>
+          </div>
+          <div id="bz-zona-todos" hidden>
+            <div class="dos-columnas">
+              <label class="campo">Días que dura
+                <input id="bz-dias" type="number" inputmode="numeric" min="0" max="365" value="30">
+              </label>
+              <label class="campo">Versión mínima
+                <input id="bz-version" type="text" inputmode="decimal" autocorrect="off" spellcheck="false" maxlength="16" placeholder="Cualquiera">
+              </label>
+            </div>
+            <p class="nota">La recibe cada jugador una vez, también los que entren mientras dure. Con 0 días no vence. Si trae algo nuevo, poné la versión que lo trae.</p>
+          </div>
+          <label class="campo">Título
+            <input id="bz-titulo" type="text" maxlength="60">
+          </label>
+          <label class="campo">Mensaje
+            <textarea id="bz-mensaje" rows="3" maxlength="500"></textarea>
+          </label>
+          <div class="titulo-con-boton regalo">
+            <h2>Regalo</h2>
+            <span id="bz-cuenta-objetos" class="suave"></span>
+          </div>
+          <div id="bz-objetos" class="lista"></div>
+          <button type="button" id="bz-agregar" class="btn ancho">+ Agregar objeto</button>
+          <p id="bz-sin-catalogo" class="nota error" hidden>No se cargó el catálogo de objetos (admin-objetos.js): por ahora solo se puede mandar oro, experiencia y mensajes.</p>
+          <div class="dos-columnas">
+            <label class="campo">Oro
+              <input id="bz-oro" type="number" inputmode="numeric" min="0" max="10000000" value="0">
+            </label>
+            <label class="campo">Experiencia
+              <input id="bz-xp" type="number" inputmode="numeric" min="0" max="10000000" value="0">
+            </label>
+          </div>
+          <p class="nota">El oro y la experiencia se reciben con la partida cargada (desde la pausa).</p>
+          <button type="submit" id="bz-revisar" class="btn primario grande ancho">Revisar y enviar</button>
+        </form>
+
+        <div id="bz-pendientes" class="lista"></div>
+
+        <div class="titulo-con-boton">
+          <h2>Cartas para todos</h2>
+          <button type="button" id="bz-globales-act" class="btn">Actualizar</button>
+        </div>
+        <div id="bz-globales" class="lista"></div>
+
+        <div class="titulo-con-boton">
+          <h2>Historial</h2>
+          <button type="button" id="bz-historial-act" class="btn">Actualizar</button>
+        </div>
+        <div id="bz-historial" class="lista"></div>
+      </section>
+
       <!-- Codigos -->
       <section id="tab-codigos" class="tab relleno" hidden>
         <h2>Generar un lote</h2>
@@ -212,6 +280,7 @@
       <button type="button" class="pestana" data-tab="fotos" aria-current="page">Fotos <span id="insignia" class="insignia" hidden></span></button>
       <button type="button" class="pestana" data-tab="denuncias">Denuncias</button>
       <button type="button" class="pestana" data-tab="jugadores">Jugadores</button>
+      <button type="button" class="pestana" data-tab="buzon">Buzón</button>
       <button type="button" class="pestana" data-tab="codigos">Códigos</button>
       <button type="button" class="pestana" data-tab="temporada">Temporada</button>
     </nav>

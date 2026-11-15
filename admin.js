@@ -3,7 +3,7 @@
  * Administracion diaria de Cursedon desde el celular: reemplaza a PaseAdminWindow sin Unity.
  *
  * No hay ningun secreto aca: el ID del proyecto es publico y el permiso lo decide el servidor
- * (Moderacion.js y Pase.js solo atienden a los Player ID de "buzon_admins"). La contraseña no
+ * (Moderacion.js, Pase.js y Buzon.js solo atienden a los Player ID de "buzon_admins"). La contraseña no
  * se guarda, y los tokens viven en sessionStorage: se van al cerrar la pestaña o al salir.
  *
  * Todo lo que viene del servidor o de un jugador se pinta como texto (ver el()), nunca como
@@ -16,6 +16,8 @@ const AUTH = "https://player-auth.services.api.unity.com";
 const CLOUD = "https://cloud-code.services.api.unity.com";
 const MODERACION = "Moderacion";
 const PASE = "Pase";
+const BUZON = "Buzon";
+const PERFILES = "Perfiles";
 
 const CLAVE_SESION = "cursedon_admin_sesion";
 // Igual que CloudCall.cs: cuanto esperar a una respuesta y entre repeticiones.
@@ -51,6 +53,11 @@ const MENSAJES = {
   no_existe: "No hay ningún jugador con ese nombre o Player ID.",
   es_admin: "Esa cuenta es de administrador: no se puede vetar.",
   cuenta_error: "Unity no pudo reactivar la cuenta, así que sigue vetado. Probá de nuevo más tarde.",
+  no_admin: "Esta cuenta no está en buzon_admins.",
+  sin_titulo: "Falta el título.",
+  muchos_objetos: "Como mucho 10 objetos por carta.",
+  rareza_invalida: "Hay una rareza que no existe.",
+  buzon_lleno: "El buzón de ese jugador está lleno: tiene 50 cartas sin recibir.",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -93,9 +100,12 @@ function avisar(texto, tono) {
   relojAviso = setTimeout(() => { aviso.hidden = true; }, tono === "mal" ? 6000 : 2200);
 }
 
+// Moderacion y Pase dicen no_autorizado; Buzon, no_admin. Las dos llevan a la misma pantalla.
+const sinPermiso = (codigo) => codigo === "no_autorizado" || codigo === "no_admin";
+
 const avisarFallo = (fallo) => {
-  // Esas dos ya cambiaron de pantalla, y la pantalla lo explica mejor.
-  if (fallo.codigo !== "no_autorizado" && fallo.codigo !== "sin_sesion") avisar(mensajeDe(fallo), "mal");
+  // Esas ya cambiaron de pantalla, y la pantalla lo explica mejor.
+  if (!sinPermiso(fallo.codigo) && fallo.codigo !== "sin_sesion") avisar(mensajeDe(fallo), "mal");
 };
 
 async function copiar(texto, aviso) {
@@ -221,7 +231,7 @@ async function llamar(script, accion, datos, repetible) {
         const salida = r.json && r.json.output;
         if (!salida) throw new Fallo("caido");
         if (salida.ok === false) {
-          if (salida.error === "no_autorizado") mostrarSinPermiso();
+          if (sinPermiso(salida.error)) mostrarSinPermiso();
           throw new Fallo(salida.error || "servidor");
         }
         return salida;
@@ -355,6 +365,7 @@ function cerrarSesion(mensaje) {
   $("insignia").hidden = true;
   for (const id of ["c-lotes", "c-resultado", "den-lista", "t-estado", "err-lista"]) $(id).replaceChildren();
   $("c-codigo").value = "";
+  olvidarBuzon();
   mostrarEntrar(mensaje);
 }
 
@@ -379,14 +390,18 @@ let pestana = "fotos";
 function irA(tab) {
   pestana = tab;
   for (const boton of document.querySelectorAll(".pestana")) {
-    if (boton.dataset.tab === tab) boton.setAttribute("aria-current", "page");
-    else boton.removeAttribute("aria-current");
+    if (boton.dataset.tab === tab) {
+      boton.setAttribute("aria-current", "page");
+      // En un teléfono angosto la fila se desplaza: la pestaña elegida queda a la vista.
+      boton.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } else boton.removeAttribute("aria-current");
   }
-  for (const nombre of ["fotos", "denuncias", "jugadores", "codigos", "temporada"]) $("tab-" + nombre).hidden = nombre !== tab;
+  for (const nombre of ["fotos", "denuncias", "jugadores", "buzon", "codigos", "temporada"]) $("tab-" + nombre).hidden = nombre !== tab;
   if (cargadas.has(tab)) return;
   cargadas.add(tab);
   if (tab === "denuncias") cargarDenuncias();
   if (tab === "jugadores") cargarVetos();
+  if (tab === "buzon") { cargarGlobales(); cargarHistorial(); }
   if (tab === "temporada") { cargarEstado(); cargarErrores(); }
 }
 
@@ -396,7 +411,8 @@ let hojaAbiertaEn = 0;
 
 function abrirHoja(...nodos) {
   const hoja = $("hoja");
-  hoja.replaceChildren(...nodos);
+  // Lo que no va (null) no se pinta: replaceChildren lo escribiria como texto.
+  hoja.replaceChildren(...nodos.filter((nodo) => nodo !== null && nodo !== undefined && nodo !== false));
   hojaAbiertaEn = Date.now();
   if (!hoja.open) hoja.showModal();
 }
@@ -867,6 +883,7 @@ function tarjetaJugador(r) {
   } else {
     botones.push(el("button", { type: "button", class: "btn peligro", onclick: () => pedirVetoCuenta(r.id, nombre, "") }, "Vetar"));
   }
+  botones.push(el("button", { type: "button", class: "btn", onclick: () => mandarCartaA({ id: r.id, nombre, nivel: p ? p.nivel : 0, sinPerfil: !p }) }, "Mandar carta"));
   botones.push(el("button", { type: "button", class: "btn", onclick: () => copiar(r.id, "Player ID copiado.") }, "Copiar ID"));
   return el("article", { class: "tarjeta" },
     el("div", { class: "cabecera-tarjeta" },
@@ -946,6 +963,462 @@ function tarjetaVeto(v) {
     el("div", { class: "botones-tarjeta" },
       el("button", { type: "button", class: "btn", onclick: () => abrirJugador(id) }, "Ver"),
       el("button", { type: "button", class: "btn", onclick: () => pedirLevantarVeto(id, nombre) }, "Levantar veto")));
+}
+
+// ---------------------------------------------------------------- buzon
+
+/*
+ * Lo mismo que BuzonAdminWindow, contra el script Buzon. Los objetos salen del catalogo de
+ * admin-objetos.js (Tools/generar_catalogo_panel.py) y no se escriben a mano: una carta con un
+ * nombre que el juego no conoce queda esperando una actualizacion que nunca llega.
+ */
+const CARTA_OBJETOS_MAX = 10;
+const CARTA_CANTIDAD_MAX = 9999;
+const CARTA_NUMERO_MAX = 10000000;
+const CARTA_DIAS_MAX = 365;
+// Primera version de Buzon.js que guarda la rareza: con una anterior, el jugador recibiria la pieza comun.
+const BUZON_CON_RAREZA = 2;
+// Una carta con rareza la entrega el juego desde esta version; el servidor la pide igual.
+const RAREZA_VERSION = "0.5.0";
+const RAREZAS = ["Common", "Rare", "Epic", "Legendary"];
+const RAREZAS_ES = ["Común", "Raro", "Épico", "Legendario"];
+const VERSION_RE = /^\d+(\.\d+){0,3}$/;
+const PLAYER_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+
+const catalogo = typeof CATALOGO_OBJETOS !== "undefined" && CATALOGO_OBJETOS && Array.isArray(CATALOGO_OBJETOS.objetos) ? CATALOGO_OBJETOS : null;
+const objetoPorNombre = new Map(catalogo ? catalogo.objetos.map((o) => [o.n, o]) : []);
+
+/* objetos: { n, cant, r }, con r = "" (la rareza del objeto) o una de RAREZAS. */
+const buzon = { para: "uno", elegido: null, objetos: [], version: 0, vista: 0, enviando: false };
+
+const nota = (texto) => el("p", { class: "nota" }, texto);
+const sinTildes = (texto) => texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const nombreRareza = (r) => (RAREZAS.indexOf(r) >= 0 ? RAREZAS_ES[RAREZAS.indexOf(r)] : String(r));
+
+async function llamarBuzon(accion, datos, repetible) {
+  const r = await llamar(BUZON, accion, datos, repetible);
+  if (r.version) buzon.version = r.version;
+  return r;
+}
+
+function compararVersiones(a, b) {
+  const pa = String(a || "0").split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || "0").split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/** La version desde la que se recibe, como la calcula Buzon.js. */
+function versionFinal(pedida, conRareza) {
+  if (conRareza && (!pedida || compararVersiones(pedida, RAREZA_VERSION) < 0)) return RAREZA_VERSION;
+  return pedida || "";
+}
+
+function regaloDe(carta) {
+  const partes = (carta.objetos || []).map((o) => (o.n > 1 ? o.n + "× " : "") + String(o.id) + (o.r ? " (" + nombreRareza(o.r) + ")" : ""));
+  if (carta.oro > 0) partes.push(miles(carta.oro) + " de oro");
+  if (carta.xp > 0) partes.push(miles(carta.xp) + " de experiencia");
+  return partes.length ? partes.join(", ") : "Solo el mensaje";
+}
+
+function ponerPara(para) {
+  buzon.para = para;
+  $("bz-para-uno").setAttribute("aria-pressed", String(para === "uno"));
+  $("bz-para-todos").setAttribute("aria-pressed", String(para === "todos"));
+  $("bz-zona-uno").hidden = para !== "uno";
+  $("bz-zona-todos").hidden = para !== "todos";
+  $("bz-pendientes").hidden = para !== "uno";
+}
+
+// ---- a quien
+
+async function buscarDestino() {
+  const texto = $("bz-buscar").value.trim();
+  if (!texto) {
+    $("bz-buscar").focus();
+    return;
+  }
+  const vista = ++buzon.vista;
+  buzon.elegido = null;
+  $("bz-pendientes").replaceChildren();
+  const zona = $("bz-resultados");
+  zona.replaceChildren(nota("Buscando…"));
+  try {
+    if (texto.length > NOMBRE_MAX) {
+      if (!PLAYER_ID_RE.test(texto)) throw new Fallo("no_existe");
+      let perfil = null;
+      try {
+        perfil = (await llamar(PERFILES, "ver", { id: texto }, true)).perfil;
+      } catch (fallo) {
+        if (fallo.codigo !== "no_existe") throw fallo;
+      }
+      if (vista !== buzon.vista) return;
+      elegirDestino(perfil ? { id: texto, nombre: String(perfil.nombre || ""), nivel: perfil.nivel || 0 } : { id: texto, nombre: "", nivel: 0, sinPerfil: true });
+      return;
+    }
+    const { perfiles } = await llamar(PERFILES, "buscar", { texto }, true);
+    if (vista !== buzon.vista) return;
+    zona.replaceChildren(...(perfiles && perfiles.length
+      ? perfiles.map(tarjetaPerfil)
+      : [nota("Nadie tiene un nombre que empiece con «" + texto + "». A un jugador sin perfil se le escribe con su Player ID.")]));
+  } catch (fallo) {
+    if (vista === buzon.vista) zona.replaceChildren(nota(mensajeDe(fallo)));
+  }
+}
+
+function tarjetaPerfil(p) {
+  const destino = { id: String(p.id), nombre: String(p.nombre || ""), nivel: p.nivel || 0 };
+  return el("article", { class: "tarjeta" },
+    el("div", { class: "cabecera-tarjeta" },
+      el("strong", null, destino.nombre),
+      el("span", { class: "suave" }, "Nivel " + destino.nivel),
+      p.clan ? el("span", { class: "etiqueta" }, String(p.clan)) : null),
+    el("div", { class: "botones-tarjeta" },
+      el("button", { type: "button", class: "btn", onclick: () => elegirDestino(destino) }, "Elegir")));
+}
+
+function elegirDestino(destino) {
+  buzon.vista++;
+  buzon.elegido = destino;
+  $("bz-resultados").replaceChildren(el("article", { class: "tarjeta" },
+    el("div", { class: "cabecera-tarjeta" },
+      el("span", { class: "etiqueta bien" }, "Para"),
+      el("strong", null, destino.nombre || "Sin perfil"),
+      destino.nivel ? el("span", { class: "suave" }, "Nivel " + destino.nivel) : null),
+    destino.sinPerfil ? nota("No tiene perfil: la carta va igual a este Player ID.") : null,
+    el("p", { class: "mono" }, destino.id),
+    el("div", { class: "botones-tarjeta" },
+      el("button", { type: "button", class: "btn", onclick: cambiarDestino }, "Cambiar"))));
+  cargarPendientes();
+}
+
+function cambiarDestino() {
+  buzon.vista++;
+  buzon.elegido = null;
+  $("bz-resultados").replaceChildren();
+  $("bz-pendientes").replaceChildren();
+  $("bz-buscar").focus();
+}
+
+/** Desde la pestaña Jugadores. */
+function mandarCartaA(destino) {
+  irA("buzon");
+  ponerPara("uno");
+  $("bz-buscar").value = destino.nombre || destino.id;
+  elegirDestino(destino);
+  document.querySelector("main").scrollTop = 0;
+}
+
+// ---- lo que todavia no recibio
+
+async function cargarPendientes() {
+  const destino = buzon.elegido;
+  const zona = $("bz-pendientes");
+  if (!destino) {
+    zona.replaceChildren();
+    return;
+  }
+  const vista = buzon.vista;
+  zona.replaceChildren(nota("Buscando sus cartas…"));
+  try {
+    const r = await llamarBuzon("pendientesDe", { para: destino.id }, true);
+    if (vista !== buzon.vista) return;
+    const cartas = r.cartas || [];
+    zona.replaceChildren(
+      el("h2", null, "Buzón de " + (destino.nombre || corto(destino.id))),
+      nota(cartas.length === 0 ? "No tiene cartas sin recibir." : cartas.length + (cartas.length === 1 ? " carta sin recibir." : " cartas sin recibir.")),
+      ...cartas.map((c) => tarjetaCarta(c, [], [el("button", { type: "button", class: "btn peligro", onclick: () => pedirCancelar(destino, c) }, "Cancelar")])));
+  } catch (fallo) {
+    if (vista === buzon.vista) zona.replaceChildren(nota(mensajeDe(fallo)));
+  }
+}
+
+function tarjetaCarta(c, etiquetas, botones) {
+  return el("article", { class: "tarjeta" },
+    el("div", { class: "cabecera-tarjeta" },
+      el("strong", null, String(c.titulo || "Sin título")),
+      el("span", { class: "suave" }, fechaHora(c.fecha)),
+      ...etiquetas),
+    c.mensaje ? el("p", null, String(c.mensaje)) : null,
+    el("p", { class: "suave" }, "Regalo: " + regaloDe(c)),
+    c.minVersion ? el("p", { class: "suave" }, "Se recibe desde la versión " + String(c.minVersion)) : null,
+    botones.length ? el("div", { class: "botones-tarjeta" }, ...botones) : null);
+}
+
+function pedirCancelar(destino, carta) {
+  abrirHoja(
+    el("h2", null, "¿Cancelar esta carta?"),
+    el("p", null, "«" + String(carta.titulo || "") + "», para " + (destino.nombre || corto(destino.id)) + ". Todavía no la recibió: deja de verla y no recibe lo que trae."),
+    el("button", { type: "button", class: "btn peligro grande", onclick: async () => {
+      cerrarHoja();
+      try {
+        // Con el nombre, el historial dice a quién se le canceló.
+        await llamarBuzon("cancelar", { para: destino.id, nombre: destino.nombre || "", id: carta.id });
+        avisar("Carta cancelada.", "bien");
+      } catch (fallo) {
+        if (fallo.codigo === "no_existe") avisar("Esa carta ya no está: la recibió o ya se canceló.", "mal");
+        else avisarFallo(fallo);
+      }
+      cargarPendientes();
+      if (sesion.token) cargarHistorial();
+    } }, "Sí, cancelarla"),
+    el("button", { type: "button", class: "btn", autofocus: true, onclick: cerrarHoja }, "No"),
+  );
+}
+
+// ---- objetos
+
+function pintarObjetos() {
+  $("bz-objetos").replaceChildren(...buzon.objetos.map(filaObjeto));
+  $("bz-cuenta-objetos").textContent = buzon.objetos.length ? buzon.objetos.length + " de " + CARTA_OBJETOS_MAX + " objetos" : "";
+  $("bz-agregar").disabled = !catalogo || buzon.objetos.length >= CARTA_OBJETOS_MAX;
+}
+
+function filaObjeto(o) {
+  const info = objetoPorNombre.get(o.n);
+  // Como en la ventana del editor: solo el equipo (y lo que hereda de el) acepta otra rareza.
+  const esEquipo = !!info && typeof info.r === "number";
+  const cantidad = el("input", { type: "number", inputmode: "numeric", min: "1", max: String(CARTA_CANTIDAD_MAX), value: String(o.cant), "aria-label": "Cantidad de " + o.n });
+  cantidad.addEventListener("input", () => { o.cant = cantidad.value === "" ? NaN : Number(cantidad.value); });
+  let izquierda = el("span", { class: "solo" }, info ? info.g : "");
+  if (esEquipo) {
+    const rareza = el("select", { "aria-label": "Rareza de " + o.n },
+      el("option", { value: "" }, "Normal (" + (RAREZAS_ES[info.r] || "?") + ")"),
+      ...RAREZAS.map((r, i) => el("option", { value: r }, RAREZAS_ES[i])));
+    rareza.value = o.r;
+    rareza.addEventListener("change", () => { o.r = rareza.value; });
+    izquierda = el("label", { class: "campo" }, "Rareza", rareza);
+  }
+  return el("article", { class: "tarjeta objeto" },
+    el("div", { class: "cabecera-tarjeta" },
+      el("strong", null, o.n),
+      el("button", { type: "button", class: "btn chico", "aria-label": "Quitar " + o.n, onclick: () => {
+        buzon.objetos.splice(buzon.objetos.indexOf(o), 1);
+        pintarObjetos();
+      } }, "✕")),
+    el("div", { class: "dos-columnas" }, izquierda, el("label", { class: "campo" }, "Cantidad", cantidad)));
+}
+
+function pedirObjeto() {
+  if (!catalogo || buzon.objetos.length >= CARTA_OBJETOS_MAX) return;
+  const filtro = el("input", { type: "search", placeholder: "Buscar por nombre", "aria-label": "Buscar objeto", autocapitalize: "none", autocorrect: "off", spellcheck: "false" });
+  const lista = el("div", { class: "elegir-lista" });
+  const pintar = () => {
+    const buscado = sinTildes(filtro.value.trim());
+    const nodos = [];
+    let grupo = "";
+    for (const o of catalogo.objetos) {
+      if (buscado && !sinTildes(o.n).includes(buscado)) continue;
+      if (o.g !== grupo) {
+        grupo = o.g;
+        nodos.push(el("p", { class: "grupo-objetos" }, grupo));
+      }
+      nodos.push(el("button", { type: "button", class: "btn", onclick: () => agregarObjeto(o.n) },
+        el("span", null, o.n),
+        el("span", null, typeof o.r === "number" ? RAREZAS_ES[o.r] || "" : "")));
+    }
+    lista.replaceChildren(...(nodos.length ? nodos : [nota("Ningún objeto se llama así.")]));
+  };
+  filtro.addEventListener("input", pintar);
+  pintar();
+  abrirHoja(
+    el("h2", null, "Agregar objeto"),
+    el("label", { class: "campo" }, filtro),
+    lista,
+    el("button", { type: "button", class: "btn", onclick: cerrarHoja }, "Cancelar"),
+  );
+}
+
+function agregarObjeto(nombre) {
+  cerrarHoja();
+  if (buzon.objetos.length >= CARTA_OBJETOS_MAX) return;
+  buzon.objetos.push({ n: nombre, cant: 1, r: "" });
+  pintarObjetos();
+}
+
+// ---- revisar y mandar
+
+function leerNumero(id, max) {
+  const texto = $(id).value.trim();
+  const n = texto === "" ? 0 : Number(texto);
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : null;
+}
+
+/** La carta del formulario, revisada como la revisaria el servidor: { carta, datos } o { error, campo }. */
+function leerCarta() {
+  const titulo = $("bz-titulo").value.trim();
+  if (!titulo) return { error: "Falta el título.", campo: "bz-titulo" };
+  const objetos = [];
+  for (const o of buzon.objetos) {
+    if (!objetoPorNombre.has(o.n)) return { error: "«" + o.n + "» no está en el catálogo." };
+    if (!Number.isInteger(o.cant) || o.cant < 1 || o.cant > CARTA_CANTIDAD_MAX) return { error: "La cantidad de «" + o.n + "» va de 1 a " + CARTA_CANTIDAD_MAX + "." };
+    objetos.push(o.r ? { id: o.n, n: o.cant, r: o.r } : { id: o.n, n: o.cant });
+  }
+  const oro = leerNumero("bz-oro", CARTA_NUMERO_MAX);
+  if (oro === null) return { error: "El oro va de 0 a " + miles(CARTA_NUMERO_MAX) + ".", campo: "bz-oro" };
+  const xp = leerNumero("bz-xp", CARTA_NUMERO_MAX);
+  if (xp === null) return { error: "La experiencia va de 0 a " + miles(CARTA_NUMERO_MAX) + ".", campo: "bz-xp" };
+  const carta = { titulo, mensaje: $("bz-mensaje").value.trim(), objetos, oro, xp };
+
+  if (buzon.para === "uno") {
+    if (!buzon.elegido) return { error: "Elegí a quién va: buscalo por nombre o pegá su Player ID.", campo: "bz-buscar" };
+    return { carta, datos: { para: buzon.elegido.id, nombre: buzon.elegido.nombre || "", carta } };
+  }
+  const textoDias = $("bz-dias").value.trim();
+  const dias = textoDias === "" ? 30 : Number(textoDias);
+  if (!Number.isInteger(dias) || dias < 0 || dias > CARTA_DIAS_MAX) return { error: "Los días van de 0 a " + CARTA_DIAS_MAX + ".", campo: "bz-dias" };
+  const minVersion = $("bz-version").value.trim();
+  if (minVersion && !VERSION_RE.test(minVersion)) return { error: "La versión mínima va así: 0.5.2.", campo: "bz-version" };
+  return { carta, dias, minVersion, datos: { carta, dias, minVersion } };
+}
+
+function revisarCarta(evento) {
+  evento.preventDefault();
+  const leida = leerCarta();
+  if (leida.error) {
+    avisar(leida.error, "mal");
+    if (leida.campo) $(leida.campo).focus();
+    return;
+  }
+  const { carta } = leida;
+  const todos = buzon.para === "todos";
+  const destino = buzon.elegido;
+  const filas = [];
+  const fila = (titulo, valor, clase) => filas.push(el("dt", null, titulo), el("dd", clase ? { class: clase } : null, valor));
+  fila("Para", todos ? "TODOS los jugadores" : (destino.nombre || "Sin perfil") + " · " + corto(destino.id), todos ? "para-todos" : null);
+  fila("Título", carta.titulo);
+  if (carta.mensaje) fila("Mensaje", carta.mensaje, "cita");
+  fila("Regalo", regaloDe(carta));
+  if (todos) fila("Dura", leida.dias === 0 ? "No vence" : leida.dias + (leida.dias === 1 ? " día" : " días"));
+  const desde = versionFinal(todos ? leida.minVersion : "", carta.objetos.some((o) => o.r));
+  if (desde) fila("Se recibe", "Desde la versión " + desde);
+  abrirHoja(
+    el("h2", null, todos ? "¿Mandar esta carta a todos?" : "¿Mandar esta carta?"),
+    el("dl", { class: "datos" }, ...filas),
+    todos ? el("p", null, "La recibe cada jugador una vez, también los que entren mientras dure. Quitarla después no le saca nada a quien ya la recibió.") : null,
+    el("button", { type: "button", class: "btn grande " + (todos ? "peligro" : "primario"), onclick: () => { cerrarHoja(); enviarCarta(leida, todos, destino); } },
+      todos ? "Sí, mandarla a todos" : "Mandar a " + (destino.nombre || corto(destino.id))),
+    el("button", { type: "button", class: "btn", autofocus: true, onclick: cerrarHoja }, "Cancelar"),
+  );
+}
+
+async function enviarCarta(leida, todos, destino) {
+  if (buzon.enviando) return;
+  buzon.enviando = true;
+  const boton = $("bz-revisar");
+  boton.disabled = true;
+  boton.textContent = "Mandando…";
+  try {
+    // Un Buzon.js viejo guardaria la carta sin la rareza: primero se pregunta que version hay.
+    if (leida.carta.objetos.some((o) => o.r) && buzon.version < BUZON_CON_RAREZA) {
+      await llamarBuzon("soyAdmin", null, true);
+      if (buzon.version < BUZON_CON_RAREZA) {
+        avisar("El script Buzon publicado es viejo y no guarda la rareza: el jugador recibiría la pieza normal. Hay que publicar Buzon.js. No se mandó nada.", "mal");
+        return;
+      }
+    }
+    // No se repite sola: si la respuesta se pierde, la carta pudo haber llegado igual.
+    const r = await llamarBuzon(todos ? "enviarTodos" : "enviar", leida.datos);
+    const desde = r.minVersion ? " Se recibe desde la versión " + r.minVersion + "." : "";
+    avisar((todos ? "Carta mandada a todos." : "Carta mandada a " + (r.nombre || destino.nombre || corto(destino.id)) + ".") + desde, "bien");
+    limpiarCarta();
+    if (todos) cargarGlobales();
+    else if (buzon.elegido === destino) cargarPendientes();
+  } catch (fallo) {
+    if (["sin_conexion", "caido", "script_error", "servidor"].includes(fallo.codigo)) avisar(mensajeDe(fallo) + " Mirá el historial antes de mandarla de nuevo.", "mal");
+    else avisarFallo(fallo);
+  } finally {
+    buzon.enviando = false;
+    boton.disabled = false;
+    boton.textContent = "Revisar y enviar";
+    if (sesion.token) cargarHistorial();
+  }
+}
+
+function limpiarCarta() {
+  $("bz-titulo").value = "";
+  $("bz-mensaje").value = "";
+  $("bz-oro").value = "0";
+  $("bz-xp").value = "0";
+  buzon.objetos = [];
+  pintarObjetos();
+}
+
+// ---- para todos e historial
+
+async function cargarGlobales() {
+  const zona = $("bz-globales");
+  zona.replaceChildren(nota("Cargando…"));
+  try {
+    const r = await llamarBuzon("globales", null, true);
+    const cartas = r.cartas || [];
+    zona.replaceChildren(...(cartas.length ? cartas.map(tarjetaGlobal) : [nota("Ninguna.")]));
+  } catch (fallo) {
+    zona.replaceChildren(nota(mensajeDe(fallo)));
+  }
+}
+
+function tarjetaGlobal(c) {
+  const vence = !c.vence ? "No vence" : (c.vigente ? "Hasta " : "Venció ") + fechaHora(c.vence);
+  return tarjetaCarta(c,
+    [el("span", { class: "etiqueta " + (c.vigente ? "bien" : "mal") }, vence)],
+    [el("button", { type: "button", class: "btn peligro", onclick: () => pedirQuitar(c) }, "Quitar")]);
+}
+
+function pedirQuitar(carta) {
+  abrirHoja(
+    el("h2", null, "¿Quitar esta carta para todos?"),
+    el("p", null, "«" + String(carta.titulo || "") + "». Quien ya la recibió se queda con lo que traía; el resto deja de verla."),
+    el("button", { type: "button", class: "btn peligro grande", onclick: async () => {
+      cerrarHoja();
+      try {
+        await llamarBuzon("quitarGlobal", { id: carta.id });
+        avisar("Carta quitada.", "bien");
+      } catch (fallo) {
+        avisarFallo(fallo);
+      }
+      cargarGlobales();
+      if (sesion.token) cargarHistorial();
+    } }, "Sí, quitarla"),
+    el("button", { type: "button", class: "btn", autofocus: true, onclick: cerrarHoja }, "Cancelar"),
+  );
+}
+
+async function cargarHistorial() {
+  const zona = $("bz-historial");
+  zona.replaceChildren(nota("Cargando…"));
+  try {
+    const r = await llamarBuzon("historial", null, true);
+    const envios = (r.envios || []).slice(0, 40);
+    zona.replaceChildren(envios.length ? el("div", { class: "historial" }, ...envios.map(lineaHistorial)) : nota("Todavía no se mandó nada."));
+  } catch (fallo) {
+    zona.replaceChildren(nota(mensajeDe(fallo)));
+  }
+}
+
+function lineaHistorial(e) {
+  const quien = String(e.nombre || "") || corto(e.para);
+  const que = e.tipo === "g" ? "A todos"
+    : e.tipo === "p" ? "A " + quien
+    : e.tipo === "quitada" ? "Quitada para todos"
+    : "Cancelada para " + quien;
+  return el("p", null, el("span", { class: "suave" }, fechaHora(e.fecha) + " · "), que + (e.titulo ? ": " + String(e.titulo) : ""));
+}
+
+function olvidarBuzon() {
+  buzon.vista++;
+  buzon.elegido = null;
+  buzon.version = 0;
+  buzon.enviando = false;
+  limpiarCarta();
+  ponerPara("uno");
+  $("bz-buscar").value = "";
+  $("bz-dias").value = "30";
+  $("bz-version").value = "";
+  for (const id of ["bz-resultados", "bz-pendientes", "bz-globales", "bz-historial"]) $(id).replaceChildren();
 }
 
 // ---------------------------------------------------------------- codigos
@@ -1204,6 +1677,22 @@ function conectar() {
 
   $("form-jugador").addEventListener("submit", buscarJugador);
   $("j-actualizar").addEventListener("click", cargarVetos);
+
+  $("bz-para-uno").addEventListener("click", () => ponerPara("uno"));
+  $("bz-para-todos").addEventListener("click", () => ponerPara("todos"));
+  $("bz-buscar-ir").addEventListener("click", buscarDestino);
+  // Enter en la busqueda busca; no abre la revision de la carta.
+  $("bz-buscar").addEventListener("keydown", (evento) => {
+    if (evento.key !== "Enter") return;
+    evento.preventDefault();
+    buscarDestino();
+  });
+  $("bz-agregar").addEventListener("click", pedirObjeto);
+  $("form-carta").addEventListener("submit", revisarCarta);
+  $("bz-globales-act").addEventListener("click", cargarGlobales);
+  $("bz-historial-act").addEventListener("click", cargarHistorial);
+  $("bz-sin-catalogo").hidden = !!catalogo;
+  pintarObjetos();
 
   $("form-codigos").addEventListener("submit", generarCodigos);
   $("c-tipo").addEventListener("change", () => {

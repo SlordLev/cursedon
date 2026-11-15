@@ -156,22 +156,27 @@ textarea { font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertic
 main { flex: 1; min-height: 0; overflow: auto; }
 .relleno { padding: 12px 16px 24px; }
 
+/* Seis pestañas no entran en 320 px: la fila se desplaza de costado en vez de cortarlas. */
 .pestanas {
   flex: none;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--borde);
   background: var(--panel);
 }
+.pestanas::-webkit-scrollbar { display: none; }
 .pestana {
+  flex: 1 0 auto;
   min-height: 56px;
-  padding: 4px 2px;
+  padding: 4px;
+  white-space: nowrap;
   border: 0;
   border-top: 3px solid transparent;
   background: none;
   color: var(--suave);
-  font: .78rem/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: .76rem/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -267,9 +272,35 @@ main { flex: 1; min-height: 0; overflow: auto; }
 .titulo-con-boton h2 { margin: 0; }
 .buscador { margin-bottom: 12px; }
 .buscador .campo { margin-bottom: 4px; }
-.buscador input { min-height: 48px; padding: 8px 12px; border: 1px solid var(--borde); border-radius: 8px; background: var(--panel); color: var(--texto); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.buscador input, #bz-zona-uno .con-boton input { min-height: 48px; padding: 8px 12px; border: 1px solid var(--borde); border-radius: 8px; background: var(--panel); color: var(--texto); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .titulo-con-boton.vetados { margin-top: 20px; }
 .datos dd.mono { overflow-wrap: anywhere; }
+
+/* ---- Buzon ---- */
+
+.btn.ancho { width: 100%; margin-bottom: 12px; }
+.segmento { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 12px; }
+.segmento .btn { border-radius: 8px 0 0 8px; }
+.segmento .btn + .btn { border-left: 0; border-radius: 0 8px 8px 0; }
+.segmento .btn[aria-pressed="true"] { background: var(--violeta); border-color: var(--violeta); color: #17101f; font-weight: 600; }
+#bz-zona-uno .campo { margin-bottom: 4px; }
+#bz-resultados { margin: 8px 0 12px; }
+#tab-buzon textarea { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.titulo-con-boton.regalo { margin-top: 8px; }
+.objeto .cabecera-tarjeta { flex-wrap: nowrap; }
+.objeto .cabecera-tarjeta strong { flex: 1; min-width: 0; }
+.objeto .dos-columnas .campo { margin-bottom: 0; }
+.objeto .solo { color: var(--suave); font-size: .9rem; align-self: center; }
+#bz-objetos:not(:empty) { margin-bottom: 10px; }
+#bz-pendientes:not(:empty) { margin-top: 24px; }
+.para-todos { color: var(--acento); font-weight: 600; }
+.hoja .elegir-lista { display: flex; flex-direction: column; gap: 6px; max-height: 52dvh; margin-bottom: 12px; overflow-y: auto; }
+.hoja .elegir-lista .btn { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 0; text-align: left; }
+.hoja .elegir-lista .btn span:last-child { flex: none; color: var(--suave); font-size: .82rem; }
+.hoja .grupo-objetos { margin: 6px 0 0; color: var(--suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+.hoja .datos { margin-bottom: 12px; }
+.hoja .cita { max-height: 7em; overflow: auto; white-space: pre-wrap; }
+.historial p { margin: 0; padding: 6px 0; border-bottom: 1px solid var(--borde); font-size: .9rem; }
 
 /* ---- Hoja de abajo y avisos ---- */
 
